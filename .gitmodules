@@ -1,0 +1,3 @@
+[submodule "AS7262_Pi"]
+	path = AS7262_Pi
+	url = https://github.com/wojtekbe/AS7262_Pi.git
