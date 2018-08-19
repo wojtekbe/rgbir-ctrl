@@ -22,6 +22,11 @@ pwm.set_pwm_freq(60)
 W = 1920
 H = 1080
 
+#TODO: demosaic arr (RGB+I) with G doubling
+#TODO: 3d print AS726x handle
+#TODO: features vs lighting opt. alg. (1. find optimal lighting)
+#TODO: own demosaic alg. (2. find optimal demosaic scheme)
+
 def get_frame():
     #open
     vd = open('/dev/video0', 'rb+', buffering=0)
