@@ -9,12 +9,18 @@ import mmap
 import select
 import time
 
+import numpy as np
+import cv2
+
 sys.path.append(os.path.join(sys.path[0], "AS7262_Pi/"))
 import AS7262_Pi
 
 import Adafruit_PCA9685
 pwm = Adafruit_PCA9685.PCA9685(address=0x41, busnum=0)
 pwm.set_pwm_freq(60)
+
+W = 1920
+H = 1080
 
 def get_frame():
     #open
@@ -27,8 +33,8 @@ def get_frame():
     #s_fmt
     fmt = v4l2.v4l2_format()
     fmt.type = v4l2.V4L2_BUF_TYPE_VIDEO_CAPTURE
-    fmt.fmt.pix.width = 1920
-    fmt.fmt.pix.height = 1080
+    fmt.fmt.pix.width = W
+    fmt.fmt.pix.height = H
     fmt.fmt.pix.pixelformat = v4l2.V4L2_PIX_FMT_SBGGR10
     fmt.fmt.pix.field = v4l2.V4L2_FIELD_NONE
     fcntl.ioctl(vd, v4l2.VIDIOC_S_FMT, fmt) # set whatever default settings we got before
@@ -79,9 +85,15 @@ def get_frame():
     fcntl.ioctl(vd, v4l2.VIDIOC_DQBUF, buf)
 
     #do something with this buffer
-    out = open("frame.raw", "wb")
     mm = buffers[buf.index]
-    out.write(mm.read(framesize))
+    frame = mm.read(framesize)
+    #save as jpg using opencv/numpy
+    arr = np.fromstring(frame, dtype=np.uint16).reshape(H, W)
+    cv2.imwrite('image.jpg', arr)
+    #save RAW
+    out = open("image.raw", "wb")
+    out.write(frame)
+    out.close()
 
     #qbuf
     fcntl.ioctl(vd, v4l2.VIDIOC_QBUF, buf)
@@ -91,9 +103,8 @@ def get_frame():
 
     #close
     vd.close()
-    out.close()
 
-#get_frame()
+get_frame()
 
 spec_vis = AS7262_Pi.AS726X(busnum=0)
 spec_vis.soft_reset()
@@ -139,6 +150,6 @@ try:
         print("IR 6:" + str(results_ir[5]) + "\n")
 
 except KeyboardInterrupt:
-    spec_vis.set_measurement_mode(3)
+    spec_vs.set_measurement_mode(3)
     spec_ir.set_measurement_mode(3)
     #spec.disable_main_led()
