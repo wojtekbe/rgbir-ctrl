@@ -95,6 +95,8 @@ def get_frame():
     #save as jpg using opencv/numpy
     arr = np.fromstring(frame, dtype=np.uint16).reshape(H, W)
     cv2.imwrite('image.jpg', arr)
+    arr_rgb = cv2.cvtColor(arr, cv2.COLOR_BAYER_GR2BGR)
+    cv2.imwrite('image_rgb.jpg', arr_rgb)
     #save RAW
     out = open("image.raw", "wb")
     out.write(frame)
