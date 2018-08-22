@@ -3,8 +3,9 @@ import time
 import sys
 import os
 
-import logging as l
-l.basicConfig(stream=sys.stderr, level=l.DEBUG)
+import logging
+logging.basicConfig(stream=sys.stderr, level=logging.DEBUG)
+l = logging.getLogger(__name__)
 
 from camera import Camera
 import numpy as np
@@ -16,8 +17,12 @@ import AS7262_Pi
 
 import Adafruit_PCA9685
 #TODO: do not fail if chip not connected
-pwm = Adafruit_PCA9685.PCA9685(address=0x41, busnum=0)
-pwm.set_pwm_freq(60)
+try:
+    lights = Adafruit_PCA9685.PCA9685(address=0x41, busnum=0)
+    lights.set_pwm_freq(60)
+except IOError:
+    l.error("PCA9685 not connected?")
+    lights = None
 
 #TODO: demosaic arr (RGB+I) with G doubling
 #TODO: 3d print AS726x handle
@@ -38,8 +43,9 @@ spec_ir.set_gain(3)
 spec_ir.set_integration_time(50)
 spec_ir.set_measurement_mode(2)
 
-for c in xrange(6):
-    pwm.set_pwm(c, 0, 0xfff)
+if lights is not None:
+    for chn in xrange(6):
+        lights.set_pwm(chn, 0, 0xfff)
 
 chn = 0
 
@@ -54,10 +60,11 @@ try:
             cv2.imshow('image', img)
             cv2.waitKey(1)
 
-        chn = (chn+1)%6
-        pwm.set_pwm(chn, 0, 0xfef)
-        time.sleep(0.1)
-        pwm.set_pwm(chn, 0, 0xfff)
+        if lights is not None:
+            chn = (chn+1)%6
+            lights.set_pwm(chn, 0, 0xfef)
+            time.sleep(0.1)
+            lights.set_pwm(chn, 0, 0xfff)
 
         results_vis = spec_vis.get_calibrated_values()
 
