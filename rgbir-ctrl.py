@@ -3,113 +3,28 @@ import time
 import sys
 import os
 
-import v4l2
-import fcntl
-import mmap
-import select
-import time
+import logging as l
+l.basicConfig(stream=sys.stderr, level=l.DEBUG)
 
+from camera import Camera
 import numpy as np
 import cv2
+DISPLAY = False
 
 sys.path.append(os.path.join(sys.path[0], "AS7262_Pi/"))
 import AS7262_Pi
 
 import Adafruit_PCA9685
+#TODO: do not fail if chip not connected
 pwm = Adafruit_PCA9685.PCA9685(address=0x41, busnum=0)
 pwm.set_pwm_freq(60)
-
-W = 1920
-H = 1080
 
 #TODO: demosaic arr (RGB+I) with G doubling
 #TODO: 3d print AS726x handle
 #TODO: features vs lighting opt. alg. (1. find optimal lighting)
 #TODO: own demosaic alg. (2. find optimal demosaic scheme)
 
-def get_frame():
-    #open
-    vd = open('/dev/video0', 'rb+', buffering=0)
-
-    #quercap
-    cp = v4l2.v4l2_capability()
-    fcntl.ioctl(vd, v4l2.VIDIOC_QUERYCAP, cp)
-
-    #s_fmt
-    fmt = v4l2.v4l2_format()
-    fmt.type = v4l2.V4L2_BUF_TYPE_VIDEO_CAPTURE
-    fmt.fmt.pix.width = W
-    fmt.fmt.pix.height = H
-    fmt.fmt.pix.pixelformat = v4l2.V4L2_PIX_FMT_SBGGR10
-    fmt.fmt.pix.field = v4l2.V4L2_FIELD_NONE
-    fcntl.ioctl(vd, v4l2.VIDIOC_S_FMT, fmt) # set whatever default settings we got before
-
-    fmt = v4l2.v4l2_format()
-    fmt.type = v4l2.V4L2_BUF_TYPE_VIDEO_CAPTURE
-    fcntl.ioctl(vd, v4l2.VIDIOC_G_FMT, fmt)
-    framesize = fmt.fmt.pix.sizeimage
-
-    #reqbufs
-    req = v4l2.v4l2_requestbuffers()
-    req.type = v4l2.V4L2_BUF_TYPE_VIDEO_CAPTURE
-    req.memory = v4l2.V4L2_MEMORY_MMAP
-    req.count = 1
-    fcntl.ioctl(vd, v4l2.VIDIOC_REQBUFS, req)
-
-    buffers = []
-    for ind in range(req.count):
-        #querybufs
-        buf = v4l2.v4l2_buffer()
-        buf.type = v4l2.V4L2_BUF_TYPE_VIDEO_CAPTURE
-        buf.memory = v4l2.V4L2_MEMORY_MMAP
-        buf.index = ind
-        fcntl.ioctl(vd, v4l2.VIDIOC_QUERYBUF, buf)
-
-        #mmap
-        mm = mmap.mmap(vd.fileno(), buf.length, mmap.MAP_SHARED, mmap.PROT_READ | mmap.PROT_WRITE, offset=buf.m.offset)
-        buffers.append(mm)
-
-        #qbuf
-        fcntl.ioctl(vd, v4l2.VIDIOC_QBUF, buf)
-
-    #streamon
-    buf_type = v4l2.v4l2_buf_type(v4l2.V4L2_BUF_TYPE_VIDEO_CAPTURE)
-    fcntl.ioctl(vd, v4l2.VIDIOC_STREAMON, buf_type)
-
-    #select
-    t0 = time.time()
-    max_t = 1
-    ready_to_read, ready_to_write, in_error = ([], [], [])
-    while len(ready_to_read) == 0 and time.time() - t0 < max_t:
-        ready_to_read, ready_to_write, in_error = select.select([vd], [], [], max_t)
-
-    #dqbuf
-    buf = v4l2.v4l2_buffer()
-    buf.type = v4l2.V4L2_BUF_TYPE_VIDEO_CAPTURE
-    buf.memory = v4l2.V4L2_MEMORY_MMAP
-    fcntl.ioctl(vd, v4l2.VIDIOC_DQBUF, buf)
-
-    #do something with this buffer
-    mm = buffers[buf.index]
-    frame = mm.read(framesize)
-    #save as jpg using opencv/numpy
-    arr = np.fromstring(frame, dtype=np.uint16).reshape(H, W)
-    cv2.imwrite('image.jpg', arr)
-    #save RAW
-    out = open("image.raw", "wb")
-    out.write(frame)
-    out.close()
-
-    #qbuf
-    fcntl.ioctl(vd, v4l2.VIDIOC_QBUF, buf)
-
-    #streamoff
-    fcntl.ioctl(vd, v4l2.VIDIOC_STREAMOFF, buf_type)
-
-    #close
-    vd.close()
-
-get_frame()
+cam = Camera()
 
 spec_vis = AS7262_Pi.AS726X(busnum=0)
 spec_vis.soft_reset()
@@ -131,6 +46,14 @@ chn = 0
 try:
     #spec.enable_main_led()
     while True:
+        img = cam.get_frame()
+        print img.size
+        print img.shape
+        img = img * 64
+        if DISPLAY:
+            cv2.imshow('image', img)
+            cv2.waitKey(1)
+
         chn = (chn+1)%6
         pwm.set_pwm(chn, 0, 0xfef)
         time.sleep(0.1)
@@ -155,6 +78,9 @@ try:
         print("IR 6:" + str(results_ir[5]) + "\n")
 
 except KeyboardInterrupt:
-    spec_vs.set_measurement_mode(3)
+    if DISPLAY:
+        cv2.destroyAllWindows()
+    cam.close()
+    spec_vis.set_measurement_mode(3)
     spec_ir.set_measurement_mode(3)
     #spec.disable_main_led()
