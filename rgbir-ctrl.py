@@ -11,8 +11,18 @@ import numpy as np
 import cv2
 DISPLAY = False
 
+#import dataout
 import sensors
 import lights
+
+def calib_lights(led_v):
+    for i in range(6):
+        leds.set(chn=lights.ALL_CHANNELS, val=0)
+        leds.set(chn=i, val=led_v)
+        time.sleep(1)
+        sp_data = spec.get()
+        print(sp_data)
+        #dataout.log([i] + sp_data)
 
 #TODO: demosaic arr (RGB+I) with G doubling
 #TODO: 3d print AS726x handle
@@ -21,7 +31,9 @@ import lights
 
 cam = Camera()
 spec = sensors.Spectro()
-lights = lights.LEDs(l)
+leds = lights.LEDs(l)
+
+calib_lights(led_v=15)
 
 try:
     while True:
@@ -31,16 +43,16 @@ try:
         img = img * 64
         if DISPLAY:
             cv2.imshow('image', img)
-           cv2.waitKey(1)
+            cv2.waitKey(1)
 
-        spec.get()
-        spec.show()
+        #turn off all lights)
+        leds.set(chn=lights.ALL_CHANNELS, val=0)
 
-        lights.set([4, 0, 0, 0, 2, 0])
+        time.sleep(1)
 
 except KeyboardInterrupt:
     if DISPLAY:
         cv2.destroyAllWindows()
     cam.close()
     spec.close()
-    lights.close()
+    leds.close()

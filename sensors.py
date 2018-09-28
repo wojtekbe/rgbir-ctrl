@@ -23,6 +23,7 @@ class Spectro:
         results_vis = self.spec_vis.get_calibrated_values()
         results_ir = self.spec_ir.get_calibrated_values()
         self.R = [r for r in results_vis+results_ir]
+        return self.R
 
     def close(self):
         self.spec_vis.set_measurement_mode(3)
