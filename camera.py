@@ -13,9 +13,32 @@ class Camera:
     def __init__(self):
         self.W = 1920
         self.H = 1080
+        self.controls = {}
         #open
         l.debug("open")
         self.vd = open('/dev/video0', 'rb+', buffering=0)
+
+        #queryctrl/g_ctrl
+        qctrl = v4l2.v4l2_queryctrl()
+        ctrl = v4l2.v4l2_control()
+        #brightness
+        qctrl.id = v4l2.V4L2_CID_BRIGHTNESS
+        try:
+            fcntl.ioctl(self.vd, v4l2.VIDIOC_QUERYCTRL, qctrl)
+            ctrl.id = qctrl.id
+            fcntl.ioctl(self.vd, v4l2.VIDIOC_G_CTRL, ctrl)
+        except:
+            l.error("QUERYCTRL/G_CTRL failed")
+        self.controls["brightness"] = (ctrl.id, ctrl.value, qctrl.minimum, qctrl.maximum)
+        #exposure
+        qctrl.id = v4l2.V4L2_CID_EXPOSURE_ABSOLUTE
+        try:
+            fcntl.ioctl(self.vd, v4l2.VIDIOC_QUERYCTRL, qctrl)
+            ctrl.id = qctrl.id
+            fcntl.ioctl(self.vd, v4l2.VIDIOC_G_CTRL, ctrl)
+        except:
+            l.error("QUERYCTRL/G_CTRL failed")
+        self.controls["exposure"] = (ctrl.id, ctrl.value, qctrl.minimum, qctrl.maximum)
 
         #querycap
         l.debug("querycap")
@@ -30,8 +53,9 @@ class Camera:
         fmt.fmt.pix.height = self.H
         fmt.fmt.pix.pixelformat = v4l2.V4L2_PIX_FMT_SBGGR10
         fmt.fmt.pix.field = v4l2.V4L2_FIELD_NONE
-        fcntl.ioctl(self.vd, v4l2.VIDIOC_S_FMT, fmt) # set whatever default settings we got before
+        fcntl.ioctl(self.vd, v4l2.VIDIOC_S_FMT, fmt)
 
+        #g_fmt
         fmt = v4l2.v4l2_format()
         fmt.type = v4l2.V4L2_BUF_TYPE_VIDEO_CAPTURE
         fcntl.ioctl(self.vd, v4l2.VIDIOC_G_FMT, fmt)
@@ -99,6 +123,31 @@ class Camera:
         fcntl.ioctl(self.vd, v4l2.VIDIOC_QBUF, buf)
 
         return img
+
+    def get_ctrl(self, ctrl_name):
+        (idx, v, mn, mx) = self.controls[ctrl_name]
+        ctrl = v4l2.v4l2_control()
+        ctrl.id = idx
+        try:
+            fcntl.ioctl(self.vd, v4l2.VIDIOC_G_CTRL, ctrl)
+            self.controls[ctrl_name] = (idx, ctrl.value, mn, mx)
+            return ctrl.value
+        except:
+            l.error("G_CTRL failed")
+
+    def set_ctrl(self, ctrl_name, val):
+        (idx, v, mn, mx) = self.controls[ctrl_name]
+        if val > mx: val = mx
+        if val < mn: val = mn
+        ctrl = v4l2.v4l2_control()
+        ctrl.id = idx
+        ctrl.value = val
+        try:
+            fcntl.ioctl(self.vd, v4l2.VIDIOC_S_CTRL, ctrl)
+            self.controls[ctrl_name] = (idx, ctrl.value, mn, mx)
+            l.debug("New controls: ", str(self.controls))
+        except:
+            l.error("S_CTRL failed")
 
     def close(self):
         #streamoff
