@@ -9,11 +9,12 @@ l = logging.getLogger(__name__)
 from camera import Camera
 import numpy as np
 import cv2
-DISPLAY = False
 
 #import dataout
 import sensors
 import lights
+
+PREVIEW=True
 
 def calib_lights(led_v):
     for i in range(6):
@@ -41,46 +42,39 @@ def demosaic(img):
 
     return (img_rgb, img_ir)
 
-
-#TODO: 3d print AS726x handle
-#TODO: features vs lighting opt. alg. (1. find optimal lighting)
-#TODO: own demosaic alg. (2. find optimal demosaic scheme)
-
 cam = Camera()
 spec = sensors.Spectro()
 leds = lights.LEDs(l)
 
 #calib_lights(led_v=15)
 
+if PREVIEW:
+    out_h264 = cv2.VideoWriter("appsrc ! videoconvert ! omxh264enc insert-sps-pps=true ! rtph264pay ! udpsink host=192.168.1.84 port=5000 sync=false", 0, 25.0, (640, 480))
+
 try:
     while True:
         img = cam.get_frame()
-        print img.size
-        print img.shape
 
-        #color depth: 10b -> 16b
-        img = img * 64
-        cv2.imwrite('frame_raw.png', img)
+        #convert color depth: 10b -> 16b
+        img = (img / 4).astype(np.uint8)
 
-        img_raw_cvt = cv2.cvtColor(img, cv2.COLOR_BAYER_RG2BGR)
-        cv2.imwrite('frame_raw_cvt.png', img_raw_cvt)
+        #demosaic as RGB
+        #img_raw_cvt = cv2.cvtColor(img, cv2.COLOR_BAYER_RG2BGR)
 
+        #demosaic as RGBIR
         (img_rgb, img_ir) = demosaic(img)
-        cv2.imwrite('frame_rgb.png', img_rgb)
-        cv2.imwrite('frame_ir.png', img_ir)
 
-        if DISPLAY:
-            cv2.imshow('image', img)
-            cv2.waitKey(1)
+        if PREVIEW:
+            img_prev = cv2.resize(img_rgb, (640, 480)).astype(np.uint8)
+            out_h264.write(img_prev)
 
         #turn off all lights)
         leds.set(chn=lights.ALL_CHANNELS, val=0)
 
-        time.sleep(1)
 
 except KeyboardInterrupt:
-    if DISPLAY:
-        cv2.destroyAllWindows()
     cam.close()
+    if PREVIEW:
+        out_h264.release()
     spec.close()
     leds.close()
